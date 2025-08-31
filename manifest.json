@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "eBird Sightings Mapper",
+  "version": "1.0",
+  "description": "Displays a Leaflet map of eBird sightings colored by species count.",
+  "permissions": ["scripting", "activeTab", "notifications"],
+  "host_permissions": [
+    "https://api.ebird.org/*",
+    "https://ebird.org/alert/*",
+    "https://ebird.org/lifelist*",
+    "https://ebird.org/mychecklists*",
+    "https://ebird.org/targets*",
+    "https://ebird.org/checklist/*",
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_title": "Map Sightings",
+    "default_icon": {
+      "48": "icon.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "leaflet/leaflet.js",
+        "leaflet/leaflet.css",
+        "leaflet/leaflet-velocity.min.js",
+        "leaflet/leaflet-velocity.css",
+        "leaflet/leaflet.fullscreen.min.js",
+        "leaflet/leaflet.fullscreen.css",
+        "leaflet/leaflet.groupedlayercontrol.css",
+        "leaflet/leaflet.groupedlayercontrol.js",
+        "d3/d3.v7.min.js",
+        "map.js",
+        "lifelist-map.js",
+        "mychecklists-map.js",
+        "targets-map.js",
+        "checklist-wind-map.js",
+        "regionLookup/regionLookup-expanded.json"
+      ],
+      "matches": [ "https://ebird.org/*" ]
+    }
+  ],
+  "icons": {
+    "48": "icon.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}

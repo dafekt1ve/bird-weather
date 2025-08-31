@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eBird Weather Maps</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/2.4.0/Control.FullScreen.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1419;
+            color: white;
+            overflow: hidden;
+        }
+
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(15, 20, 25, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .location-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .info-badge {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        #map {
+            position: absolute;
+            top: 90px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+        }
+
+        .controls {
+            position: absolute;
+            top: 110px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(15, 20, 25, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 280px;
+            max-height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #e2e8f0;
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(30, 41, 59, 0.8);
+            color: white;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(75, 85, 99, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(107, 114, 128, 0.9);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+            background: rgba(15, 20, 25, 0.98);
+            padding: 40px;
+            border-radius: 16px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(59, 130, 246, 0.3);
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            color: #86efac;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .checklist-link {
+            color: #06b6d4;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .checklist-link:hover {
+            color: #0891b2;
+            text-decoration: underline;
+        }
+
+        /* Custom Leaflet control styles */
+        .leaflet-control-container .leaflet-top .leaflet-control {
+            background: rgba(15, 20, 25, 0.9) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+        }
+
+        .leaflet-control-container select {
+            background: rgba(30, 41, 59, 0.9) !important;
+            color: white !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌤️ eBird Weather Maps</h1>
+        <div class="header-info">
+            <div class="location-info">
+                <span id="locationName">Loading location...</span>
+                <div class="info-badge" id="coordsDisplay">--°, --°</div>
+                <div class="info-badge" id="dateDisplay">Loading...</div>
+            </div>
+            <div class="info-badge" id="checklistInfo">Weather Data</div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="pressureLevel">Pressure Level:</label>
+            <select id="pressureLevel">
+                <option value="925">925 mb (~2,500 ft)</option>
+                <option value="900">900 mb (~3,300 ft)</option>
+                <option value="850" selected>850 mb (~5,000 ft)</option>
+                <option value="800">800 mb (~6,500 ft)</option>
+                <option value="750">750 mb (~8,200 ft)</option>
+                <option value="700">700 mb (~10,000 ft)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="timeOffset">Time Offset (hours):</label>
+            <input type="number" id="timeOffset" value="0" min="-48" max="48" step="3">
+            <small style="opacity: 0.7; font-size: 12px;">Adjust time relative to checklist date</small>
+        </div>
+
+        <button class="btn" onclick="loadWeatherData()" id="loadBtn">
+            🌤️ Load Weather Data
+        </button>
+
+        <button class="btn btn-secondary" onclick="resetView()" id="resetBtn">
+            🎯 Reset View
+        </button>
+
+        <div id="statusContainer"></div>
+    </div>
+
+    <div id="loadingOverlay" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <div id="loadingText">Loading weather data...</div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/2.4.0/Control.FullScreen.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+
+    <script>
+        class WeatherMapper {
+            constructor() {
+                this.map = null;
+                this.checklistData = null;
+                this.currentVelocityLayer = null;
+                this.checklistMarker = null;
+                this.windDataCache = {};
+                
+                // Configuration
+                this.herbie_server_url = 'http://localhost:8000'; // Update this to your server URL
+                
+                this.init();
+            }
+
+            init() {
+                this.extractURLParameters();
+                this.initializeMap();
+                this.updateHeaderInfo();
+                this.setupEventListeners();
+                
+                // Auto-load weather data if we have location
+                if (this.checklistData.lat && this.checklistData.lng) {
+                    this.loadWeatherData();
+                }
+            }
+
+            extractURLParameters() {
+                const params = new URLSearchParams(window.location.search);
+                this.checklistData = {
+                    lat: parseFloat(params.get('lat')) || null,
+                    lng: parseFloat(params.get('lng')) || null,
+                    datetime: params.get('datetime') || new Date().toISOString(),
+                    location: params.get('location') || 'Unknown Location',
+                    checklistId: params.get('checklistId') || '',
+                    source: params.get('source') || 'direct'
+                };
+
+                // If no location provided, try to get from checklist ID
+                if ((!this.checklistData.lat || !this.checklistData.lng) && this.checklistData.checklistId) {
+                    this.fetchChecklistData(this.checklistData.checklistId);
+                }
+            }
+
+            async fetchChecklistData(checklistId) {
+                try {
+                    const response = await fetch(`${this.herbie_server_url}/api/checklist/${checklistId}`);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.checklistData = {
+                            ...this.checklistData,
+                            lat: data.lat,
+                            lng: data.lng,
+                            location: data.location,
+                            datetime: data.datetime || this.checklistData.datetime
+                        };
+                        
+                        this.updateHeaderInfo();
+                        this.updateMapView();
+                        this.addChecklistMarker();
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch checklist data:', error);
+                    this.showError('Failed to load checklist information');
+                }
+            }
+
+            initializeMap() {
+                const defaultLat = this.checklistData.lat || 40.0;
+                const defaultLng = this.checklistData.lng || -100.0;
+                
+                this.map = L.map('map', {
+                    maxBounds: [[-90, -Infinity], [90, Infinity]]
+                }).setView([defaultLat, defaultLng], 6);
+
+                // Add base layers (matching your existing style)
+                const googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                    maxZoom: 15,
+                    subdomains: ['mt0','mt1','mt2','mt3'],
+                    attribution: '&copy; Google'
+                }).addTo(this.map);
+
+                const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                    maxZoom: 15,
+                    subdomains: ['mt0','mt1','mt2','mt3'],
+                    attribution: '&copy; Google'
+                });
+
+                const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                    maxZoom: 15,
+                    subdomains: ['mt0','mt1','mt2','mt3'],
+                    attribution: '&copy; Google'
+                });
+
+                const googleTerrain = L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+                    maxZoom: 15,
+                    subdomains: ['mt0','mt1','mt2','mt3'],
+                    attribution: '&copy; Google'
+                });
+
+                const baseMaps = {
+                    "Streets": googleStreets,
+                    "Hybrid": googleHybrid,
+                    "Satellite": googleSat,
+                    "Terrain": googleTerrain
+                };
+
+                L.control.layers(baseMaps).addTo(this.map);
+                
+                // Add fullscreen control
+                this.map.addControl(new L.Control.Fullscreen());
+
+                this.addChecklistMarker();
+            }
+
+            addChecklistMarker() {
+                if (!this.checklistData.lat || !this.checklistData.lng) return;
+
+                if (this.checklistMarker) {
+                    this.map.removeLayer(this.checklistMarker);
+                }
+
+                this.checklistMarker = L.circleMarker([this.checklistData.lat, this.checklistData.lng], {
+                    radius: 8,
+                    color: "#3b82f6",
+                    fillColor: "#06b6d4",
+                    fillOpacity: 0.8,
+                    weight: 3,
+                }).addTo(this.map);
+
+                const popupContent = `
+                    <div style="color: #333; font-family: system-ui;">
+                        <strong>${this.checklistData.location}</strong><br>
+                        <small>${this.checklistData.lat.toFixed(4)}, ${this.checklistData.lng.toFixed(4)}</small><br>
+                        <small>${new Date(this.checklistData.datetime).toLocaleString()}</small>
+                        ${this.checklistData.checklistId ? `<br><a href="https://ebird.org/checklist/${this.checklistData.checklistId}" target="_blank" style="color: #3b82f6;">View Checklist</a>` : ''}
+                    </div>
+                `;
+                
+                this.checklistMarker.bindPopup(popupContent);
+            }
+
+            updateMapView() {
+                if (!this.checklistData.lat || !this.checklistData.lng) return;
+                
+                const bounds = [
+                    [this.checklistData.lat - 2.5, this.checklistData.lng - 3.5],
+                    [this.checklistData.lat + 2.5, this.checklistData.lng + 3.5]
+                ];
+                this.map.fitBounds(bounds);
+            }
+
+            updateHeaderInfo() {
+                const locationEl = document.getElementById('locationName');
+                const coordsEl = document.getElementById('coordsDisplay');
+                const dateEl = document.getElementById('dateDisplay');
+                const checklistEl = document.getElementById('checklistInfo');
+
+                locationEl.textContent = this.checklistData.location;
+                
+                if (this.checklistData.lat && this.checklistData.lng) {
+                    coordsEl.textContent = `${this.checklistData.lat.toFixed(3)}°, ${this.checklistData.lng.toFixed(3)}°`;
+                } else {
+                    coordsEl.textContent = 'Coordinates pending...';
+                }
+                
+                const date = new Date(this.checklistData.datetime);
+                dateEl.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                if (this.checklistData.checklistId) {
+                    checklistEl.innerHTML = `<a href="https://ebird.org/checklist/${this.checklistData.checklistId}" target="_blank" class="checklist-link">Checklist ${this.checklistData.checklistId}</a>`;
+                }
+            }
+
+            setupEventListeners() {
+                // Update weather when level changes
+                document.getElementById('pressureLevel').addEventListener('change', () => {
+                    this.loadWeatherData();
+                });
+            }
+
+            async loadWeatherData() {
+                if (!this.checklistData.lat || !this.checklistData.lng) {
+                    this.showError('Location data required for weather mapping');
+                    return;
+                }
+
+                const level = document.getElementById('pressureLevel').value;
+                const timeOffset = parseInt(document.getElementById('timeOffset').value) || 0;
+
+                // Calculate target datetime with offset
+                const targetDate = new Date(this.checklistData.datetime);
+                targetDate.setHours(targetDate.getHours() + timeOffset);
+
+                const cacheKey = `${level}-${targetDate.toISOString()}`;
+                
+                this.showLoading('Loading weather data...');
+                this.disableControls();
+
+                try {
+                    // Check cache first
+                    if (this.windDataCache[cacheKey]) {
+                        this.displayWeatherData(this.windDataCache[cacheKey], level);
+                        this.hideLoading();
+                        this.enableControls();
+                        return;
+                    }
+
+                    // Fetch weather data from your Herbie server
+                    const params = new URLSearchParams({
+                        lat: this.checklistData.lat,
+                        lng: this.checklistData.lng,
+                        datetime: targetDate.toISOString(),
+                        level: level
+                    });
+
+                    const response = await fetch(`${this.herbie_server_url}/api/weather?${params}`);
+                    const result = await response.json();
+
+                    if (response.ok && result.status === 'success') {
+                        // Cache the data
+                        this.windDataCache[cacheKey] = result.data;
+                        this.displayWeatherData(result.data, level);
+                        this.showSuccess(`Weather data loaded for ${level} mb level`);
+                    } else {
+                        throw new Error(result.message || 'Failed to load weather data');
+                    }
+
+                } catch (error) {
+                    console.error('Weather data error:', error);
+                    this.showError(`Failed to load weather data: ${error.message}`);
+                } finally {
+                    this.hideLoading();
+                    this.enableControls();
+                }
+            }
+
+            displayWeatherData(weatherData, level) {
+                // Remove existing velocity layer
+                if (this.currentVelocityLayer) {
+                    this.map.removeLayer(this.currentVelocityLayer);
+                }
+
+                // Get color scale and settings for this level (matching your existing code)
+                const options = this.getVelocityOptionsForLevel(level);
+
+                // Create velocity layer using leaflet-velocity
+                this.currentVelocityLayer = L.velocityLayer({
+                    displayValues: true,
+                    displayOptions: {
+                        speedUnit: "kn",
+                        customSpeedUnit: "knots", 
+                        customSpeedFunction: function (speedInMps) {
+                            return (speedInMps * 1.94384).toFixed(1);  // m/s to knots
+                        },
+                        velocityType: `${level}mb Wind`,
+                        displayPosition: "bottomleft",
+                        displayEmptyString: "No wind data",
+                        angleConvention: "meteoCW",
+                    },
+                    data: weatherData,
+                    velocityScale: 0.005,
+                    particleMultiplier: this.map.isFullscreen ? this.map.isFullscreen() ? 0.01 : 0.05 : 0.05,
+                    lineWidth: 2,
+                    colorScale: options.colorScale,
+                    maxVelocity: options.maxVelocity,
+                });
+
+                this.currentVelocityLayer.addTo(this.map);
+                this.createLegendForLevel(level, options.colorScale, options.maxVelocity);
+            }
+
+            getVelocityOptionsForLevel(level) {
+                // Matching your existing color schemes
+                switch (level) {
+                    case "925":
+                    case "900":
+                        return {
+                            colorScale: d3.range(0, 1.01, 0.1).map(t => d3.interpolateYlGnBu(t)),
+                            maxVelocity: 20
+                        };
+                    case "850":
+                    case "800":
+                        return {
+                            colorScale: d3.range(0, 1.01, 0.1).map(t => d3.interpolateBuPu(t)),
+                            maxVelocity: 30
+                        };
+                    case "750":
+                    case "700":
+                        return {
+                            colorScale: d3.range(0, 1.01, 0.1).map(t => d3.interpolateOrRd(t)),
+                            maxVelocity: 40
+                        };
+                    default:
+                        return {
+                            colorScale: ['#91bfdb', '#ffffbf', '#fc8d59'],
+                            maxVelocity: 30
+                        };
+                }
+            }
+
+            createLegendForLevel(level, colorScale, maxVelocity) {
+                // Remove existing legend
+                d3.select("#velocity-legend").remove();
+
+                const legendWidth = 300;
+                const legendHeight = 12;
+
+                const legendContainer = d3.select("#map").append("div")
+                    .attr("id", "velocity-legend")
+                    .style("position", "absolute")
+                    .style("bottom", "60px")
+                    .style("left", "10px")
+                    .style("background", "rgba(15, 20, 25, 0.95)")
+                    .style("padding", "12px")
+                    .style("border", "1px solid rgba(255, 255, 255, 0.2)")
+                    .style("border-radius", "8px")
+                    .style("font", "12px sans-serif")
+                    .style("color", "white")
+                    .style("z-index", "10000")
+                    .style("backdrop-filter", "blur(10px)");
+
+                const legendSvg = legendContainer.append("svg")
+                    .attr("width", legendWidth)
+                    .attr("height", 35);
+
+                const scale = d3.scaleLinear()
+                    .domain([0, maxVelocity])
+                    .range([0, legendWidth]);
+
+                // Create gradient
+                const defs = legendSvg.append("defs");
+                const gradient = defs.append("linearGradient")
+                    .attr("id", "legend-gradient");
+
+                colorScale.forEach((color, i) => {
+                    gradient.append("stop")
+                        .attr("offset", `${(i / (colorScale.length - 1)) * 100}%`)
+                        .attr("stop-color", color);
+                });
+
+                legendSvg.append("rect")
+                    .attr("x", 0)
+                    .attr("y", 15)
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", "url(#legend-gradient)");
+
+                // Axis
+                const axis = d3.axisBottom(scale)
+                    .ticks(5)
+                    .tickFormat(d => `${d} kt`);
+
+                legendSvg.append("g")
+                    .attr("transform", `translate(0, ${legendHeight + 15})`)
+                    .style("color", "white")
+                    .call(axis);
+
+                // Label
+                legendSvg.append("text")
+                    .attr("x", 0)
+                    .attr("y", 12)
+                    .style("fill", "white")
+                    .style("font-weight", "500")
+                    .text(`Wind Speed @ ${level} mb`);
+            }
+
+            showLoading(message = 'Loading...') {
+                const overlay = document.getElementById('loadingOverlay');
+                const text = document.getElementById('loadingText');
+                text.textContent = message;
+                overlay.style.display = 'block';
+            }
+
+            hideLoading() {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }
+
+            disableControls() {
+                const controls = document.querySelectorAll('.controls select, .controls input, .controls button');
+                controls.forEach(control => control.disabled = true);
+            }
+
+            enableControls() {
+                const controls = document.querySelectorAll('.controls select, .controls input, .controls button');
+                controls.forEach(control => control.disabled = false);
+            }
+
+            showError(message) {
+                this.clearStatus();
+                const container = document.getElementById('statusContainer');
+                container.innerHTML = `<div class="error">❌ ${message}</div>`;
+            }
+
+            showSuccess(message) {
+                this.clearStatus();
+                const container = document.getElementById('statusContainer');
+                container.innerHTML = `<div class="success">✅ ${message}</div>`;
+                setTimeout(() => this.clearStatus(), 5000);
+            }
+
+            clearStatus() {
+                document.getElementById('statusContainer').innerHTML = '';
+            }
+
+            resetView() {
+                if (this.checklistData.lat && this.checklistData.lng) {
+                    this.updateMapView();
+                    this.showSuccess('View reset to checklist location');
+                } else {
+                    this.map.setView([40.0, -100.0], 4);
+                    this.showSuccess('View reset to default location');
+                }
+            }
+        }
+
+        // Global functions for button clicks
+        function loadWeatherData() {
+            if (window.weatherMapper) {
+                window.weatherMapper.loadWeatherData();
+            }
+        }
+
+        function resetView() {
+            if (window.weatherMapper) {
+                window.weatherMapper.resetView();
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if we have the required libraries
+            if (typeof L === 'undefined') {
+                document.body.innerHTML = `
+                    <div style="padding: 40px; text-align: center; font-family: system-ui;">
+                        <h2 style="color: #ef4444;">Missing Dependencies</h2>
+                        <p>Leaflet library failed to load. Please check your internet connection.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            if (typeof d3 === 'undefined') {
+                document.body.innerHTML = `
+                    <div style="padding: 40px; text-align: center; font-family: system-ui;">
+                        <h2 style="color: #ef4444;">Missing Dependencies</h2>
+                        <p>D3 library failed to load. Please check your internet connection.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Initialize the weather mapper
+            window.weatherMapper = new WeatherMapper();
+
+            // Show help message if no parameters provided
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('lat') && !params.get('lng') && !params.get('checklistId')) {
+                document.getElementById('statusContainer').innerHTML = `
+                    <div class="error">
+                        <strong>Welcome to eBird Weather Maps!</strong><br><br>
+                        This page should be launched from an eBird checklist or with URL parameters.<br><br>
+                        <strong>Example:</strong><br>
+                        <code style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">
+                            ?lat=40.123&lng=-105.456&datetime=2024-01-15T12:00:00Z&location=Boulder&checklistId=S123456789
+                        </code>
+                    </div>
+                `;
+            }
+        });
+
+        // Add velocity layer support if not loaded via CDN
+        if (typeof L !== 'undefined' && !L.velocityLayer) {
+            // You'll need to include the leaflet-velocity library
+            console.warn('leaflet-velocity not loaded - you need to include this library for wind visualization');
+        }
+    </script>
+</body>
+</html>
