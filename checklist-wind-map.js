@@ -6,7 +6,7 @@
     }
 
     // Configuration - Update this URL to your weather website
-    const WEATHER_SITE_URL = 'https://dafekt1ve.github.io/weather'; // CHANGE THIS to your actual domain
+    const WEATHER_SITE_URL = 'https://dafekt1ve.github.io'; // CHANGE THIS to your actual domain
     
     // === Coordinate & date extraction ===
     function getLatLonFromLink() {
@@ -147,7 +147,10 @@
             source: 'ebird-extension'
         });
 
-        const weatherUrl = `${WEATHER_SITE_URL}/weather?${params.toString()}`;
+        // FIXED: Direct to GitHub Pages URL without extra path
+        const weatherUrl = `${WEATHER_SITE_URL}?${params.toString()}`;
+        
+        console.log('Opening weather URL:', weatherUrl); // Debug line
         window.open(weatherUrl, '_blank');
         
         // Update status
