@@ -28,21 +28,67 @@
     }
 
     function getLocationName() {
-        // Try to extract location name from various elements
-        const selectors = [
-            '.Heading-main',
+        // Try multiple selectors to find the actual location name
+        const locationSelectors = [
+            // Primary location selectors (most specific first)
+            '.Heading-main .Heading-main-text',
             '.Checklist-meta-location',
-            'h1',
-            '[class*="location"]'
+            '.Checklist-meta-location a',
+            '.Heading-main h1',
+            
+            // Secondary selectors
+            'a[href*="/region/"]',
+            'h1:not([class*="Date"]):not([class*="Time"])',
+            
+            // Fallback selectors
+            '.Heading-main',
+            'h1'
         ];
         
-        for (const selector of selectors) {
+        for (const selector of locationSelectors) {
             const element = document.querySelector(selector);
             if (element && element.textContent.trim()) {
-                return element.textContent.trim();
+                const text = element.textContent.trim();
+                
+                // Skip if it looks like a date
+                if (isDateString(text)) {
+                    console.log(`Skipping date-like text: ${text}`);
+                    continue;
+                }
+                
+                // Skip if it contains obvious date patterns
+                if (text.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i) ||
+                    text.match(/\b\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}\b/) ||
+                    text.match(/\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i)) {
+                    console.log(`Skipping date pattern: ${text}`);
+                    continue;
+                }
+                
+                console.log(`Found location: ${text}`);
+                return text;
             }
         }
+        
+        // If we still can't find a good location name, try to extract from URL or other sources
+        const urlPath = window.location.pathname;
+        const regionMatch = urlPath.match(/\/region\/([^\/]+)/);
+        if (regionMatch) {
+            return regionMatch[1].replace(/-/g, ' ');
+        }
+        
         return 'Unknown Location';
+    }
+
+    function isDateString(text) {
+        // Check if the text looks like a date
+        const datePatterns = [
+            /^\w+\s+\d{1,2}\s+\w+\s+\d{4}$/,  // "Sun 31 Aug 2025"
+            /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,     // "8/31/2025"
+            /^\d{4}-\d{2}-\d{2}$/,             // "2025-08-31"
+            /^\w+,?\s+\w+\s+\d{1,2},?\s+\d{4}$/  // "Sunday, August 31, 2025"
+        ];
+        
+        return datePatterns.some(pattern => pattern.test(text.trim()));
     }
 
     // === Create weather options UI ===
@@ -142,18 +188,15 @@
             lat: checklistData.lat,
             lng: checklistData.lng,
             datetime: checklistData.datetime,
-            location: checklistData.location,
+            // location: checklistData.location,  // REMOVED - we don't need it in URL
             checklistId: checklistData.checklistId || '',
             source: 'ebird-extension'
         });
 
-        // FIXED: Direct to GitHub Pages URL without extra path
-        const weatherUrl = `${WEATHER_SITE_URL}?${params.toString()}`;
-        
-        console.log('Opening weather URL:', weatherUrl); // Debug line
+        const weatherUrl = `https://dafekt1ve.github.io?${params.toString()}`;
+        console.log('Opening weather URL:', weatherUrl);
         window.open(weatherUrl, '_blank');
         
-        // Update status
         const statusEl = document.getElementById('status-message');
         if (statusEl) {
             statusEl.innerHTML = '✅ <span style="color: #86efac;">Weather map opened in new tab!</span>';
