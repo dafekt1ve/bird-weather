@@ -404,14 +404,14 @@
                 L.control.layers(baseMaps).addTo(this.map);
                 
                 // Add fullscreen control with proper error handling
-                if (L.Control && L.Control.Fullscreen) {
-                    this.map.addControl(new L.Control.Fullscreen());
-                } else if (L.control && L.control.fullscreen) {
-                    // Alternative syntax
-                    L.control.fullscreen().addTo(this.map);
-                } else {
-                    console.warn('Fullscreen control not available');
-                }
+                // if (L.Control && L.Control.Fullscreen) {
+                //     this.map.addControl(new L.Control.Fullscreen());
+                // } else if (L.control && L.control.fullscreen) {
+                //     // Alternative syntax
+                //     L.control.fullscreen().addTo(this.map);
+                // } else {
+                //     console.warn('Fullscreen control not available');
+                // }
 
                 this.addChecklistMarker();
             }
