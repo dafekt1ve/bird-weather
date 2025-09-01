@@ -403,8 +403,15 @@
 
                 L.control.layers(baseMaps).addTo(this.map);
                 
-                // Add fullscreen control
-                this.map.addControl(new L.Control.Fullscreen());
+                // Add fullscreen control with proper error handling
+                if (L.Control && L.Control.Fullscreen) {
+                    this.map.addControl(new L.Control.Fullscreen());
+                } else if (L.control && L.control.fullscreen) {
+                    // Alternative syntax
+                    L.control.fullscreen().addTo(this.map);
+                } else {
+                    console.warn('Fullscreen control not available');
+                }
 
                 this.addChecklistMarker();
             }
@@ -725,44 +732,98 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
-            // Check if we have the required libraries
-            if (typeof L === 'undefined') {
-                document.body.innerHTML = `
-                    <div style="padding: 40px; text-align: center; font-family: system-ui;">
-                        <h2 style="color: #ef4444;">Missing Dependencies</h2>
-                        <p>Leaflet library failed to load. Please check your internet connection.</p>
-                    </div>
-                `;
-                return;
-            }
+            // Enhanced library checking with retry mechanism
+            function checkLibrariesWithRetry(maxRetries = 10, retryDelay = 500) {
+                let retries = 0;
+                
+                function attemptInit() {
+                    // Check Leaflet
+                    if (typeof L === 'undefined') {
+                        document.body.innerHTML = `
+                            <div style="padding: 40px; text-align: center; font-family: system-ui; color: white;">
+                                <h2 style="color: #ef4444;">Missing Dependencies</h2>
+                                <p>Leaflet library failed to load. Please check your internet connection.</p>
+                            </div>
+                        `;
+                        return;
+                    }
 
-            if (typeof d3 === 'undefined') {
-                document.body.innerHTML = `
-                    <div style="padding: 40px; text-align: center; font-family: system-ui;">
-                        <h2 style="color: #ef4444;">Missing Dependencies</h2>
-                        <p>D3 library failed to load. Please check your internet connection.</p>
-                    </div>
-                `;
-                return;
-            }
+                    // Check D3
+                    if (typeof d3 === 'undefined') {
+                        document.body.innerHTML = `
+                            <div style="padding: 40px; text-align: center; font-family: system-ui; color: white;">
+                                <h2 style="color: #ef4444;">Missing Dependencies</h2>
+                                <p>D3 library failed to load. Please check your internet connection.</p>
+                            </div>
+                        `;
+                        return;
+                    }
 
-            // Initialize the weather mapper
-            window.weatherMapper = new WeatherMapper();
+                    // Check for velocity layer with multiple possible names
+                    const hasVelocityLayer = (
+                        (typeof L.velocityLayer === 'function') ||
+                        (typeof L.VelocityLayer === 'function') ||
+                        (L.Control && L.Control.Velocity) ||
+                        (window.L && window.L.velocityLayer)
+                    );
 
-            // Show help message if no parameters provided
-            const params = new URLSearchParams(window.location.search);
-            if (!params.get('lat') && !params.get('lng') && !params.get('checklistId')) {
-                document.getElementById('statusContainer').innerHTML = `
-                    <div class="error">
-                        <strong>Welcome to eBird Weather Maps!</strong><br><br>
-                        This page should be launched from an eBird checklist or with URL parameters.<br><br>
-                        <strong>Example:</strong><br>
-                        <code style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">
-                            ?lat=40.123&lng=-105.456&datetime=2024-01-15T12:00:00Z&location=Boulder&checklistId=S123456789
-                        </code>
-                    </div>
-                `;
+                    // Check fullscreen control
+                    const hasFullscreenControl = (
+                        (L.Control && L.Control.Fullscreen) ||
+                        (L.control && L.control.fullscreen) ||
+                        (L.Control && L.Control.FullScreen)
+                    );
+
+                    if ((!hasVelocityLayer || !hasFullscreenControl) && retries < maxRetries) {
+                        console.log(`Libraries not ready, retrying... (${retries + 1}/${maxRetries})`);
+                        console.log(`Velocity: ${hasVelocityLayer}, Fullscreen: ${hasFullscreenControl}`);
+                        retries++;
+                        setTimeout(attemptInit, retryDelay);
+                        return;
+                    }
+
+                    if (!hasVelocityLayer) {
+                        console.warn('Leaflet-velocity failed to load after retries. Using fallback visualization.');
+                        document.getElementById('statusContainer').innerHTML = `
+                            <div class="error">
+                                <strong>Velocity Layer Unavailable</strong><br>
+                                Wind visualization may not work properly. The weather data will still load, but particles may not display.
+                            </div>
+                        `;
+                    }
+
+                    if (!hasFullscreenControl) {
+                        console.warn('Fullscreen control not available.');
+                    }
+
+                    console.log('✅ Core libraries loaded successfully');
+                    console.log(`✅ Velocity layer: ${hasVelocityLayer ? 'Available' : 'Not available'}`);
+                    console.log(`✅ Fullscreen control: ${hasFullscreenControl ? 'Available' : 'Not available'}`);
+
+                    // Initialize the weather mapper regardless
+                    window.weatherMapper = new WeatherMapper();
+
+                    // Show help message if no parameters provided
+                    const params = new URLSearchParams(window.location.search);
+                    if (!params.get('lat') && !params.get('lng') && !params.get('checklistId')) {
+                        document.getElementById('statusContainer').innerHTML = `
+                            <div class="error">
+                                <strong>Welcome to eBird Weather Maps!</strong><br><br>
+                                This page should be launched from an eBird checklist or with URL parameters.<br><br>
+                                <strong>Example:</strong><br>
+                                <code style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">
+                                    ?lat=40.123&lng=-105.456&datetime=2024-01-15T12:00:00Z&checklistId=S123456789
+                                </code>
+                            </div>
+                        `;
+                    }
+                }
+                
+                attemptInit();
             }
+            
+            // Start the initialization with retry
+            checkLibrariesWithRetry();
         });
 
         // Add velocity layer support if not loaded via CDN
