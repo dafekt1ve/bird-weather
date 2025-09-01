@@ -86,12 +86,67 @@
             z-index: 1000;
             background: rgba(15, 20, 25, 0.95);
             backdrop-filter: blur(10px);
-            padding: 20px;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             min-width: 280px;
+            max-width: 320px;
             max-height: calc(100vh - 140px);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .controls.collapsed {
+            max-height: 50px;
+            overflow: hidden;
+        }
+
+        .controls-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-header:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .controls-body {
+            padding: 20px;
+            max-height: calc(100vh - 200px);
             overflow-y: auto;
+        }
+
+        .collapse-icon {
+            transition: transform 0.3s ease;
+            font-size: 18px;
+        }
+
+        .controls.collapsed .collapse-icon {
+            transform: rotate(180deg);
+        }
+
+        .control-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .control-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #06b6d4;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .control-group {
@@ -250,34 +305,94 @@
 
     <div id="map"></div>
 
-    <div class="controls">
-        <div class="control-group">
-            <label for="pressureLevel">Pressure Level:</label>
-            <select id="pressureLevel">
-                <option value="925">925 mb (~2,500 ft)</option>
-                <option value="900">900 mb (~3,300 ft)</option>
-                <option value="850" selected>850 mb (~5,000 ft)</option>
-                <option value="800">800 mb (~6,500 ft)</option>
-                <option value="750">750 mb (~8,200 ft)</option>
-                <option value="700">700 mb (~10,000 ft)</option>
-            </select>
+    <div class="controls" id="controlsPanel">
+        <div class="controls-header" onclick="toggleControls()">
+            <span><strong>Weather Controls</strong></span>
+            <span class="collapse-icon">▼</span>
         </div>
+        
+        <div class="controls-body">
+            <div class="control-section">
+                <div class="control-section-title">Model Data</div>
+                <div id="modelDataInfo" style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+                    Loading model information...
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <div class="control-section-title">Weather Model</div>
+                <div class="control-group">
+                    <select id="weatherModel">
+                        <option value="gfs">GFS (Global)</option>
+                        <option value="nam">NAM (North America)</option>
+                        <option value="hrrr">HRRR (CONUS High-Res)</option>
+                        <option value="rap">RAP (North America)</option>
+                    </select>
+                </div>
+            </div>
 
-        <div class="control-group">
-            <label for="timeOffset">Time Offset (hours):</label>
-            <input type="number" id="timeOffset" value="0" min="-48" max="48" step="3">
-            <small style="opacity: 0.7; font-size: 12px;">Adjust time relative to checklist date</small>
+            <div class="control-section">
+                <div class="control-section-title">Atmospheric Level</div>
+                <div class="control-group">
+                    <select id="pressureLevel">
+                        <option value="925">925 mb (~2,500 ft)</option>
+                        <option value="900">900 mb (~3,300 ft)</option>
+                        <option value="850" selected>850 mb (~5,000 ft)</option>
+                        <option value="800">800 mb (~6,500 ft)</option>
+                        <option value="750">750 mb (~8,200 ft)</option>
+                        <option value="700">700 mb (~10,000 ft)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-section-title">Weather Variable</div>
+                <div class="control-group">
+                    <select id="weatherVariable">
+                        <option value="wind" selected>Wind (Speed & Direction)</option>
+                        <option value="temperature">Temperature</option>
+                        <option value="precipitation">Precipitation</option>
+                        <option value="humidity">Relative Humidity</option>
+                        <option value="pressure">Pressure</option>
+                        <option value="clouds">Cloud Cover</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-section-title">Time Controls</div>
+                <div class="control-group">
+                    <label for="timeOffset">Time Offset (hours):</label>
+                    <input type="number" id="timeOffset" value="0" min="-48" max="48" step="3">
+                    <small style="opacity: 0.7; font-size: 12px;">Adjust time relative to checklist date</small>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-section-title">Map Layers</div>
+                <div class="control-group">
+                    <label for="baseLayer">Base Map:</label>
+                    <select id="baseLayer">
+                        <option value="streets" selected>Streets</option>
+                        <option value="satellite">Satellite</option>
+                        <option value="hybrid">Hybrid</option>
+                        <option value="terrain">Terrain</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <button class="btn" onclick="loadWeatherData()" id="loadBtn">
+                    🌤️ Load Weather Data
+                </button>
+
+                <button class="btn btn-secondary" onclick="resetView()" id="resetBtn">
+                    🎯 Reset View
+                </button>
+            </div>
+
+            <div id="statusContainer"></div>
         </div>
-
-        <button class="btn" onclick="loadWeatherData()" id="loadBtn">
-            🌤️ Load Weather Data
-        </button>
-
-        <button class="btn btn-secondary" onclick="resetView()" id="resetBtn">
-            🎯 Reset View
-        </button>
-
-        <div id="statusContainer"></div>
     </div>
 
     <div id="loadingOverlay" class="loading" style="display: none;">
@@ -771,6 +886,31 @@
             }
         }
 
+        function toggleControls() {
+            const controls = document.getElementById('controlsPanel');
+            controls.classList.toggle('collapsed');
+            
+            // Save state to localStorage if available
+            try {
+                const isCollapsed = controls.classList.contains('collapsed');
+                localStorage.setItem('controlsCollapsed', isCollapsed);
+            } catch (e) {
+                // Ignore if localStorage not available
+            }
+        }
+
+        // Restore controls state on load
+        function restoreControlsState() {
+            try {
+                const isCollapsed = localStorage.getItem('controlsCollapsed') === 'true';
+                if (isCollapsed) {
+                    document.getElementById('controlsPanel').classList.add('collapsed');
+                }
+            } catch (e) {
+                // Ignore if localStorage not available
+            }
+        }
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
             // Enhanced library checking with retry mechanism
@@ -849,7 +989,7 @@
                     if (!params.get('lat') && !params.get('lng') && !params.get('checklistId')) {
                         document.getElementById('statusContainer').innerHTML = `
                             <div class="error">
-                                <strong>Welcome to Bird-Weather Maps!</strong><br><br>
+                                <strong>Welcome to eBird Weather Maps!</strong><br><br>
                                 This page should be launched from an eBird checklist or with URL parameters.<br><br>
                                 <strong>Example:</strong><br>
                                 <code style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">

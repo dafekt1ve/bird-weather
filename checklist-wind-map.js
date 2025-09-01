@@ -27,6 +27,7 @@
         return match ? match[1] : null;
     }
 
+    // Fixed location extraction functions for checklist-wind-map.js
     function getLocationName() {
         // Try multiple selectors to find the actual location name
         const locationSelectors = [
@@ -89,6 +90,106 @@
         ];
         
         return datePatterns.some(pattern => pattern.test(text.trim()));
+    }
+
+    // Alternative: Get location from Google Maps link if available
+    function getLocationFromGoogleMapsLink() {
+        const googleMapsLink = document.querySelector("a[title='View with Google Maps']");
+        if (googleMapsLink) {
+            const url = new URL(googleMapsLink.href);
+            const query = url.searchParams.get('query');
+            if (query && !query.match(/^-?\d+\.?\d*,-?\d+\.?\d*$/)) {
+                // If query is not just coordinates, it might be a place name
+                return query;
+            }
+        }
+        return null;
+    }
+
+    // Enhanced location extraction that looks for H3 in GridFlex cells
+    function getEnhancedLocationName() {
+        // Method 1: Look for H3 elements in GridFlex cells (most specific)
+        const gridFlexCells = document.querySelectorAll('[class*="GridFlex"] [class*="cell"]');
+        for (const cell of gridFlexCells) {
+            const h3 = cell.querySelector('h3');
+            if (h3 && h3.textContent.trim() && !isDateString(h3.textContent.trim())) {
+                console.log(`Found location in GridFlex H3: ${h3.textContent.trim()}`);
+                return h3.textContent.trim();
+            }
+        }
+        
+        // Method 2: Look for specific eBird location classes
+        const ebirdLocationSelectors = [
+            '.Heading-main h1:not([class*="date"]):not([class*="time"])',
+            '.Checklist-meta-location',
+            '.Checklist-meta-location a',
+            'h1.Heading-main-text',
+            '[data-testid="location-name"]',
+            '.location-name'
+        ];
+        
+        for (const selector of ebirdLocationSelectors) {
+            const element = document.querySelector(selector);
+            if (element && element.textContent.trim() && !isDateString(element.textContent.trim())) {
+                console.log(`Found location with selector ${selector}: ${element.textContent.trim()}`);
+                return element.textContent.trim();
+            }
+        }
+        
+        // Method 3: Look in page title for location
+        const title = document.title;
+        const titleMatch = title.match(/eBird Checklist - (.+?) - \d/);
+        if (titleMatch && !isDateString(titleMatch[1])) {
+            console.log(`Found location in title: ${titleMatch[1]}`);
+            return titleMatch[1];
+        }
+        
+        // Method 4: Try to get from URL or breadcrumbs
+        const breadcrumbs = document.querySelectorAll('nav a, .breadcrumb a');
+        for (const crumb of breadcrumbs) {
+            const text = crumb.textContent.trim();
+            if (text && !isDateString(text) && text.length > 3 && !text.match(/^\d+$/)) {
+                console.log(`Found location in breadcrumb: ${text}`);
+                return text;
+            }
+        }
+        
+        console.log('Could not find location name, using fallback');
+        return 'Bird Location';
+    }
+
+    function isDateString(text) {
+        // Enhanced date detection
+        const datePatterns = [
+            /^\w+\s+\d{1,2}\s+\w+\s+\d{4}$/,  // "Sun 31 Aug 2025"
+            /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,     // "8/31/2025"
+            /^\d{4}-\d{2}-\d{2}$/,             // "2025-08-31"
+            /^\w+,?\s+\w+\s+\d{1,2},?\s+\d{4}$/,  // "Sunday, August 31, 2025"
+            /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i,  // Starts with day abbreviation
+            /\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?/i, // Contains time
+            /^(January|February|March|April|May|June|July|August|September|October|November|December)/i // Starts with month
+        ];
+        
+        return datePatterns.some(pattern => pattern.test(text.trim()));
+    }
+
+    // Updated main extraction in your script
+    function extractChecklistData() {
+        const coords = getLatLonFromLink();
+        const date = getChecklistDate();
+        const checklistId = getChecklistId();
+        const location = getEnhancedLocationName(); // Use the enhanced version
+        
+        const checklistData = {
+            lat: coords?.lat,
+            lng: coords?.lon,
+            datetime: date,
+            location: location,
+            checklistId: checklistId
+        };
+        
+        console.log('Extracted checklist data:', checklistData);
+        return checklistData;
     }
 
     // === Create weather options UI ===
