@@ -647,7 +647,8 @@
                     .style("font", "12px sans-serif")
                     .style("color", "white")
                     .style("z-index", "10000")
-                    .style("backdrop-filter", "blur(10px)");
+                    .style("backdrop-filter", "blur(10px)")
+                    .style("transition", "opacity 0.3s ease"); // Add transition
 
                 const legendSvg = legendContainer.append("svg")
                     .attr("width", legendWidth)
@@ -692,6 +693,20 @@
                     .style("fill", "white")
                     .style("font-weight", "500")
                     .text(`Wind Speed @ ${level} mb`);
+            }
+
+            hideVelocityLegend() {
+                const legend = document.getElementById('velocity-legend');
+                if (legend) {
+                    legend.style.opacity = '0.3';
+                }
+            }
+
+            showVelocityLegend() {
+                const legend = document.getElementById('velocity-legend');
+                if (legend) {
+                    legend.style.opacity = '1';
+                }
             }
 
             showLoading(message = 'Loading...') {
