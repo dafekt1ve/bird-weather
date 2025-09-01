@@ -53,31 +53,210 @@ def process_wind_data(lat, lon, date, level=850):
         target_date_utc = target_date_utc.astimezone(ZoneInfo('UTC'))
         print(f"Converted to UTC: {target_date_utc}")
     
+    # Check if target date is in the future - adjust to latest available data
+    now_utc = datetime.datetime.now(ZoneInfo('UTC'))
+    if target_date_utc > now_utc:
+        print(f"Target date {target_date_utc} is in the future, using current time: {now_utc}")
+        target_date_utc = now_utc
+    
     # Find the appropriate GFS initialization time and forecast hour
     # GFS runs every 6 hours: 00, 06, 12, 18 UTC
     gfs_init_hours = [0, 6, 12, 18]
     
+    # For future dates or very recent dates, we need to account for GFS processing delay
+    # GFS data typically becomes available 3-4 hours after initialization time
+    processing_delay_hours = 4
+    latest_available_time = now_utc - datetime.timedelta(hours=processing_delay_hours)
+    
+    # If target date is too recent, adjust it
+    if target_date_utc > latest_available_time:
+        print(f"Target date {target_date_utc} may not have GFS data yet, using {latest_available_time}")
+        target_date_utc = latest_available_time
+    
     # Find the most recent GFS initialization time before or at the target time
     target_hour = target_date_utc.hour
     
-    # Find the closest GFS init time (floor)
-    init_hour = max([h for h in gfs_init_hours if h <= target_hour], default=18)
+    # Find the closest GFS init time (floor) for the target date
+    suitable_init_hours = [h for h in gfs_init_hours if h <= target_hour]
     
-    # If no suitable init hour found for today, use the last run from yesterday
-    if init_hour > target_hour:
-        init_date_utc = (target_date_utc - datetime.timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
-        fxx = target_hour + 6  # Hours from yesterday 18Z
-    else:
+    if suitable_init_hours:
+        init_hour = max(suitable_init_hours)
         init_date_utc = target_date_utc.replace(hour=init_hour, minute=0, second=0, microsecond=0)
         fxx = target_hour - init_hour
+    else:
+        # If no suitable init hour found for today, use the last run from yesterday
+        init_date_utc = (target_date_utc - datetime.timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+        fxx = target_hour + 6  # Hours from yesterday 18Z
     
-    print(f"GFS initialization: {init_date_utc}, forecast hour: {fxx}")
+    # Ensure the initialization time is not in the future considering processing delay
+    if init_date_utc + datetime.timedelta(hours=processing_delay_hours) > now_utc:
+        print(f"Calculated init time {init_date_utc} is too recent, falling back to previous run")
+        # Fall back to previous 6-hour cycle
+        if init_hour > 0:
+            prev_init_hour = max([h for h in gfs_init_hours if h < init_hour])
+            init_date_utc = target_date_utc.replace(hour=prev_init_hour, minute=0, second=0, microsecond=0)
+            fxx = target_hour - prev_init_hour
+        else:
+            # Fall back to yesterday's 18Z run
+            init_date_utc = (target_date_utc - datetime.timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+            fxx = target_hour + 6
+    
+    # Cap forecast hours at reasonable limits (GFS forecasts go out to ~384 hours)
+    if fxx > 120:  # Use max 5-day forecast for better data availability
+        print(f"Forecast hour {fxx} is too far out, adjusting to more recent data")
+        # Adjust to use a more recent initialization with shorter forecast
+        while fxx > 120 and init_date_utc > target_date_utc - datetime.timedelta(days=3):
+            init_date_utc -= datetime.timedelta(hours=6)
+            fxx += 6
+    
+    print(f"Final GFS initialization: {init_date_utc}, forecast hour: {fxx}")
     
     # Convert to naive datetime for Herbie (it expects naive UTC datetimes)
     init_date_naive = init_date_utc.replace(tzinfo=None)
     
-    # Create data directory relative to script location
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, '..', 'data')
+    os.makedirs(data_dir, exist_ok=True)
+    
+    # Generate filename
+    date_str = init_date_naive.strftime("%Y%m%d%H")
+    if fxx > 0:
+        filename = os.path.join(data_dir, f"gfs_velocity_{date_str}_f{fxx:03d}_{level}mb.json")
+    else:
+        filename = os.path.join(data_dir, f"gfs_velocity_{date_str}_{level}mb.json")
+    
+    print(f"Looking for cached file: {filename}")
+    
+    # Check if file already exists and is recent
+    if os.path.exists(filename):
+        try:
+            # Check if file is recent (less than 6 hours old)
+            file_age = datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+            if file_age < datetime.timedelta(hours=6):
+                print(f"Loading recent cached file: {filename}")
+                with open(filename, "r") as f:
+                    return json.load(f)
+            else:
+                print(f"Cached file is old ({file_age}), fetching new data...")
+        except Exception as e:
+            print(f"Error loading cached file: {e}")
+    
+    print("Fetching new GFS data...")
+    
+    # Try multiple forecast hours if the exact one fails (for robustness)
+    for attempt_fxx in [fxx, max(0, fxx-1), max(0, fxx-2), fxx+1, fxx+2]:
+        try:
+            print(f"Attempting to fetch GFS data with fxx={attempt_fxx}")
+            gfs_data = fetch_gfs_data(lat, lon, init_date_naive, attempt_fxx, level)
+            
+            if gfs_data is not None:
+                print(f"Successfully fetched GFS data with fxx={attempt_fxx}, processing...")
+                
+                # Check if we have the required variables
+                if 'u' not in gfs_data or 'v' not in gfs_data:
+                    print("Error: GFS data missing u or v components")
+                    print(f"Available variables: {list(gfs_data.keys())}")
+                    continue
+                
+                u = gfs_data['u']
+                v = gfs_data['v']
+
+                lon_step = float(gfs_data.longitude[1] - gfs_data.longitude[0])
+                lat_step = float(gfs_data.latitude[0] - gfs_data.latitude[1])  # lat is decreasing
+
+                velocity_u = convert_wind_to_velocity_json(u, "u", level, target_date_utc, init_date_utc, lon_step, lat_step)
+                velocity_v = convert_wind_to_velocity_json(v, "v", level, target_date_utc, init_date_utc, lon_step, lat_step)
+
+                result = [velocity_u, velocity_v]
+                
+                # Save to cache
+                try:
+                    with open(filename, "w") as f:
+                        json.dump(result, f, indent=2)
+                    print(f"Saved weather data to: {filename}")
+                except Exception as e:
+                    print(f"Warning: Could not save cached file: {e}")
+                
+                print(f"Successfully processed wind data - returning {len(result)} components")
+                return result
+                
+        except Exception as e:
+            print(f"Attempt with fxx={attempt_fxx} failed: {e}")
+            continue
+    
+    print("Failed to fetch GFS data with all attempted forecast hours")
+    return None(__file__)
+    data_dir = os.path.join(script_dir, '..', 'data')
+    os.makedirs(data_dir, exist_ok=True)
+    
+    # Generate filename
+    date_str = init_date_naive.strftime("%Y%m%d%H")
+    if fxx > 0:
+        filename = os.path.join(data_dir, f"gfs_velocity_{date_str}_f{fxx:03d}_{level}mb.json")
+    else:
+        filename = os.path.join(data_dir, f"gfs_velocity_{date_str}_{level}mb.json")
+    
+    print(f"Looking for cached file: {filename}")
+    
+    # Check if file already exists and is recent
+    if os.path.exists(filename):
+        try:
+            # Check if file is recent (less than 6 hours old)
+            file_age = datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+            if file_age < datetime.timedelta(hours=6):
+                print(f"Loading recent cached file: {filename}")
+                with open(filename, "r") as f:
+                    return json.load(f)
+            else:
+                print(f"Cached file is old ({file_age}), fetching new data...")
+        except Exception as e:
+            print(f"Error loading cached file: {e}")
+    
+    print("Fetching new GFS data...")
+    
+    # Try multiple forecast hours if the exact one fails (for robustness)
+    for attempt_fxx in [fxx, max(0, fxx-1), max(0, fxx-2), fxx+1, fxx+2]:
+        try:
+            print(f"Attempting to fetch GFS data with fxx={attempt_fxx}")
+            gfs_data = fetch_gfs_data(lat, lon, init_date_naive, attempt_fxx, level)
+            
+            if gfs_data is not None:
+                print(f"Successfully fetched GFS data with fxx={attempt_fxx}, processing...")
+                
+                # Check if we have the required variables
+                if 'u' not in gfs_data or 'v' not in gfs_data:
+                    print("Error: GFS data missing u or v components")
+                    print(f"Available variables: {list(gfs_data.keys())}")
+                    continue
+                
+                u = gfs_data['u']
+                v = gfs_data['v']
+
+                lon_step = float(gfs_data.longitude[1] - gfs_data.longitude[0])
+                lat_step = float(gfs_data.latitude[0] - gfs_data.latitude[1])  # lat is decreasing
+
+                velocity_u = convert_wind_to_velocity_json(u, "u", level, target_date_utc, init_date_utc, lon_step, lat_step)
+                velocity_v = convert_wind_to_velocity_json(v, "v", level, target_date_utc, init_date_utc, lon_step, lat_step)
+
+                result = [velocity_u, velocity_v]
+                
+                # Save to cache
+                try:
+                    with open(filename, "w") as f:
+                        json.dump(result, f, indent=2)
+                    print(f"Saved weather data to: {filename}")
+                except Exception as e:
+                    print(f"Warning: Could not save cached file: {e}")
+                
+                print(f"Successfully processed wind data - returning {len(result)} components")
+                return result
+                
+        except Exception as e:
+            print(f"Attempt with fxx={attempt_fxx} failed: {e}")
+            continue
+    
+    print("Failed to fetch GFS data with all attempted forecast hours")
+    return None(__file__)
     data_dir = os.path.join(script_dir, '..', 'data')
     os.makedirs(data_dir, exist_ok=True)
     
