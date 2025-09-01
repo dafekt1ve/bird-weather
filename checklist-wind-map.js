@@ -193,7 +193,7 @@
             source: 'ebird-extension'
         });
 
-        const weatherUrl = `https://dafekt1ve.github.io?${params.toString()}`;
+        const weatherUrl = `https://dafekt1ve.github.io/index.html?${params.toString()}`;
         console.log('Opening weather URL:', weatherUrl);
         window.open(weatherUrl, '_blank');
         
