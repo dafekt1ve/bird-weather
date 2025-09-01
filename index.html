@@ -302,10 +302,27 @@
                 this.checklistMarker = null;
                 this.windDataCache = {};
                 
-                // Configuration
-                this.herbie_server_url = 'http://localhost:8000'; // Update this to your server URL
+                // Store last displayed data for re-rendering after map movements
+                this.lastDisplayedWeatherData = null;
+                this.lastDisplayedLevel = null;
+                this.movementIndicator = null;
+                
+                // Configuration - automatically detect server URL
+                this.herbie_server_url = this.detectServerUrl();
+                console.log('Using server URL:', this.herbie_server_url);
                 
                 this.init();
+            }
+
+            detectServerUrl() {
+                // Check if we're on localhost (development)
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    return 'http://localhost:8000';
+                }
+                
+                // For production, you'll need to update this when you deploy your server
+                // For now, try localhost but fall back gracefully
+                return 'http://localhost:8000'; // TODO: Update with your deployed server URL
             }
 
             init() {
@@ -404,14 +421,14 @@
                 L.control.layers(baseMaps).addTo(this.map);
                 
                 // Add fullscreen control with proper error handling
-                // if (L.Control && L.Control.Fullscreen) {
-                //     this.map.addControl(new L.Control.Fullscreen());
-                // } else if (L.control && L.control.fullscreen) {
-                //     // Alternative syntax
-                //     L.control.fullscreen().addTo(this.map);
-                // } else {
-                //     console.warn('Fullscreen control not available');
-                // }
+                if (L.Control && L.Control.Fullscreen) {
+                    this.map.addControl(new L.Control.Fullscreen());
+                } else if (L.control && L.control.fullscreen) {
+                    // Alternative syntax
+                    L.control.fullscreen().addTo(this.map);
+                } else {
+                    console.warn('Fullscreen control not available');
+                }
 
                 this.addChecklistMarker();
             }
@@ -539,6 +556,10 @@
             }
 
             displayWeatherData(weatherData, level) {
+                // Store data for re-rendering after map movements
+                this.lastDisplayedWeatherData = weatherData;
+                this.lastDisplayedLevel = level;
+
                 // Remove existing velocity layer
                 if (this.currentVelocityLayer) {
                     this.map.removeLayer(this.currentVelocityLayer);
@@ -563,7 +584,7 @@
                     },
                     data: weatherData,
                     velocityScale: 0.005,
-                    particleMultiplier: this.map.isFullscreen ? this.map.isFullscreen() ? 0.01 : 0.05 : 0.05,
+                    particleMultiplier: 0.05, // You can adjust this based on performance
                     lineWidth: 2,
                     colorScale: options.colorScale,
                     maxVelocity: options.maxVelocity,
@@ -571,6 +592,11 @@
 
                 this.currentVelocityLayer.addTo(this.map);
                 this.createLegendForLevel(level, options.colorScale, options.maxVelocity);
+                
+                // Ensure legend is visible
+                this.showVelocityLegend();
+                
+                console.log(`Weather layer displayed for ${level}mb level`);
             }
 
             getVelocityOptionsForLevel(level) {
